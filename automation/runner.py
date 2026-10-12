@@ -142,6 +142,25 @@ async def run_workflow_execution(
         if workflow.save_state and state_store:
             state_saved = await browser_manager.save_session_state()
 
+        # Capture resulting page state so desktop app renders the updated page after actions
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=6000)
+        except Exception:
+            pass
+
+        try:
+            final_inspector = PageInspector(page)
+            final_bundle = await final_inspector.inspect(capture_screenshot=True)
+            bundle_path = artifacts_dir / "inspection-bundle.json"
+            bundle_path.write_text(json.dumps(final_bundle.model_dump(), indent=2), encoding="utf-8")
+            if final_bundle.screenshot_base64:
+                import base64
+                shot_file = artifacts_dir / "preview.png"
+                shot_file.write_bytes(base64.b64decode(final_bundle.screenshot_base64))
+            logger.info(f"Captured post-execution page snapshot for: {final_bundle.url}")
+        except Exception as e:
+            logger.warning(f"Could not capture post-execution page snapshot: {e}")
+
     except Exception as e:
         overall_error = str(e)
         logger.error(f"Fatal error during execution: {e}", exc_info=True)

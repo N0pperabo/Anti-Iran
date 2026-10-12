@@ -1,12 +1,13 @@
-"""Full-Screen Interactive Browser Studio Workspace with live Chromium engine and collapsible drawer."""
+"""Full-Screen Interactive Browser Studio with Remote GitHub Actions execution and live page updating."""
 
+import base64
 import json
 import time
 from pathlib import Path
 from typing import Optional
-from PySide6.QtCore import QByteArray, QEvent, QObject, QTimer, QUrl, Qt, Signal
+from PySide6.QtCore import QByteArray, QEvent, QObject, QThread, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
-from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
+from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
@@ -39,6 +40,7 @@ from models.action_types import (
     WaitAction,
     WorkflowActionUnion,
 )
+from models.inspect_bundle import InspectBundle
 from models.workflow import WorkflowDefinition
 from ui.widgets.action_dialog import ActionDialog
 from ui.widgets.quick_action_modal import QuickActionModal
@@ -46,6 +48,135 @@ from ui.widgets.settings_dialog import SettingsDialog
 from ui.widgets.web_inspector_script import INSPECTOR_JS_CODE
 from github.models import RunConclusion, RunStatus, WorkflowRunInfo
 from github.poller import WorkflowPoller
+
+
+class RemotePageFetchWorker(QThread):
+    """Background worker that dispatches inspect-page.yml, polls, and downloads the HTML snapshot."""
+
+    status_update = Signal(str)
+    finished = Signal(object, str)  # (InspectBundle or None, error_message)
+
+    def __init__(self, state_mgr: ApplicationStateManager, url: str):
+        super().__init__()
+        self.state_mgr = state_mgr
+        self.url = url
+
+    def run(self):
+        client = self.state_mgr.get_github_client()
+        if not client:
+            self.finished.emit(None, "GitHub client not configured. Open Settings first.")
+            return
+
+        try:
+            self.status_update.emit(f"Dispatching fetch for '{self.url}' on GitHub Actions runner...")
+            dispatch_time = time.time()
+            client.dispatch_workflow("inspect-page.yml", inputs={"url": self.url})
+
+            poller = WorkflowPoller(client, poll_interval_sec=3.0)
+            self.status_update.emit("Waiting for GitHub Actions runner (ubuntu-latest) to pick up job...")
+            run_info = poller.wait_for_new_run("inspect-page.yml", dispatch_time, timeout_sec=60.0)
+            if not run_info:
+                self.finished.emit(None, "Timed out waiting for GitHub Actions runner to start.")
+                return
+
+            self.status_update.emit(f"Runner active (Job #{run_info.run_number}). Fetching page in Chromium...")
+            completed_run = poller.poll_run_until_complete(
+                run_info.id,
+                on_status_update=lambda r, jobs: self.status_update.emit(f"Status: {r.status.value.upper()} on runner..."),
+                timeout_sec=300.0,
+            )
+
+            self.status_update.emit("Downloading page snapshot artifact...")
+            artifacts = client.list_artifacts(completed_run.id)
+            inspect_art = next((a for a in artifacts if a.name == "inspection-bundle"), None)
+            if not inspect_art:
+                self.finished.emit(None, "No inspection-bundle artifact found in completed run.")
+                return
+
+            dest_dir = Path("artifacts/remote_fetch")
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            client.download_and_extract_artifact(inspect_art.id, dest_dir)
+
+            bundle_file = dest_dir / "inspection-bundle.json"
+            if bundle_file.exists():
+                data = json.loads(bundle_file.read_text(encoding="utf-8"))
+                bundle = InspectBundle.model_validate(data)
+                self.finished.emit(bundle, "")
+            else:
+                self.finished.emit(None, "inspection-bundle.json not found in downloaded bundle.")
+
+        except Exception as e:
+            self.finished.emit(None, str(e))
+
+
+class RemoteWorkflowExecutionWorker(QThread):
+    """Background worker that dispatches browser-automation.yml, streams logs, and downloads resulting page state."""
+
+    status_update = Signal(str)
+    step_log_received = Signal(str)
+    finished = Signal(object, object, str)  # (WorkflowRunInfo, InspectBundle or None, error_message)
+
+    def __init__(self, state_mgr: ApplicationStateManager, workflow: WorkflowDefinition):
+        super().__init__()
+        self.state_mgr = state_mgr
+        self.workflow = workflow
+
+    def run(self):
+        client = self.state_mgr.get_github_client()
+        if not client:
+            self.finished.emit(None, None, "GitHub client not configured.")
+            return
+
+        try:
+            wf_json = json.dumps(self.workflow.model_dump())
+            self.status_update.emit(f"Dispatching '{self.workflow.name}' to GitHub Actions...")
+            dispatch_time = time.time()
+            client.dispatch_workflow("browser-automation.yml", inputs={"workflow_json": wf_json})
+
+            poller = WorkflowPoller(client, poll_interval_sec=3.0)
+            self.status_update.emit("Waiting for Ubuntu runner to start...")
+            run_info = poller.wait_for_new_run("browser-automation.yml", dispatch_time, timeout_sec=60.0)
+            if not run_info:
+                self.finished.emit(None, None, "Timed out waiting for workflow run to start.")
+                return
+
+            self.status_update.emit(f"Runner Active (Job #{run_info.run_number}). Executing actions...")
+
+            def _on_update(r: WorkflowRunInfo, jobs):
+                log_lines = [f"=== GitHub Actions Run #{r.run_number} ==="]
+                for j in jobs:
+                    log_lines.append(f"Job: {j.name} ({j.status})")
+                    for s in j.steps:
+                        c = f"[{s.conclusion.upper()}]" if s.conclusion else f"({s.status})"
+                        log_lines.append(f"  • {s.name}: {c}")
+                self.step_log_received.emit("\n".join(log_lines))
+
+            completed_run = poller.poll_run_until_complete(
+                run_info.id,
+                on_status_update=_on_update,
+                timeout_sec=300.0,
+            )
+
+            # Download resulting artifacts
+            self.status_update.emit("Retrieving execution bundle & updated page state...")
+            artifacts = client.list_artifacts(completed_run.id)
+            run_art = next((a for a in artifacts if a.name == "run-bundle"), None)
+            bundle: Optional[InspectBundle] = None
+
+            if run_art:
+                dest_dir = Path(f"artifacts/run_{completed_run.run_number}")
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                client.download_and_extract_artifact(run_art.id, dest_dir)
+
+                bundle_file = dest_dir / "inspection-bundle.json"
+                if bundle_file.exists():
+                    data = json.loads(bundle_file.read_text(encoding="utf-8"))
+                    bundle = InspectBundle.model_validate(data)
+
+            self.finished.emit(completed_run, bundle, "")
+
+        except Exception as e:
+            self.finished.emit(None, None, str(e))
 
 
 class StudioWebPage(QWebEnginePage):
@@ -65,21 +196,19 @@ class StudioWebPage(QWebEnginePage):
             except Exception as e:
                 print(f"Failed to parse inspect payload: {e}")
         else:
-            # Pass through standard console messages
             super().javaScriptConsoleMessage(level, message, line_number, source_id)
 
 
 class StudioView(QWidget):
-    """Unified full-screen interactive studio workspace."""
-
-    run_status_updated = Signal(str)
+    """Unified full-screen interactive studio workspace with remote GitHub Actions fetch & execution."""
 
     def __init__(self, state_mgr: ApplicationStateManager, parent=None):
         super().__init__(parent)
         self.state_mgr = state_mgr
         self.inspect_mode_active = False
+        self.current_page_url = self.state_mgr.config.last_url or "https://github.com"
 
-        # Main vertical layout
+        # Root layout
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
@@ -88,55 +217,43 @@ class StudioView(QWidget):
         self.toolbar = QFrame()
         self.toolbar.setStyleSheet("background-color: #161b22; border-bottom: 1px solid #30363d; padding: 4px 10px;")
         tb_layout = QHBoxLayout(self.toolbar)
-        tb_layout.setContentsMargins(6, 4, 6, 4)
+        tb_layout.setContentsMargins(8, 4, 8, 4)
         tb_layout.setSpacing(8)
 
-        # Brand pill
+        # Brand
         logo_lbl = QLabel("⚡ Studio")
-        logo_lbl.setStyleSheet("font-weight: bold; color: #58a6ff; font-size: 14px; padding-right: 6px;")
+        logo_lbl.setStyleSheet("font-weight: bold; color: #58a6ff; font-size: 14px; padding-right: 4px;")
         tb_layout.addWidget(logo_lbl)
-
-        # Navigation buttons
-        self.back_btn = QPushButton("◀")
-        self.back_btn.setToolTip("Back")
-        self.back_btn.setFixedWidth(36)
-        self.back_btn.clicked.connect(self._nav_back)
-        tb_layout.addWidget(self.back_btn)
-
-        self.fwd_btn = QPushButton("▶")
-        self.fwd_btn.setToolTip("Forward")
-        self.fwd_btn.setFixedWidth(36)
-        self.fwd_btn.clicked.connect(self._nav_forward)
-        tb_layout.addWidget(self.fwd_btn)
-
-        self.reload_btn = QPushButton("🔄")
-        self.reload_btn.setToolTip("Reload")
-        self.reload_btn.setFixedWidth(36)
-        self.reload_btn.clicked.connect(self._nav_reload)
-        tb_layout.addWidget(self.reload_btn)
 
         # URL Input Bar
         self.url_input = QLineEdit()
-        self.url_input.setText(self.state_mgr.config.last_url)
-        self.url_input.setPlaceholderText("https://github.com or any website URL...")
-        self.url_input.returnPressed.connect(self._load_url_from_input)
+        self.url_input.setText(self.current_page_url)
+        self.url_input.setPlaceholderText("Enter website URL to fetch via GitHub Actions (e.g. https://github.com)...")
+        self.url_input.returnPressed.connect(self._fetch_url_via_github)
         tb_layout.addWidget(self.url_input, stretch=1)
 
-        self.go_btn = QPushButton("Go")
-        self.go_btn.setFixedWidth(50)
-        self.go_btn.clicked.connect(self._load_url_from_input)
-        tb_layout.addWidget(self.go_btn)
+        # Primary Remote Fetch Button
+        self.fetch_btn = QPushButton("🌐 Fetch via GitHub 🚀")
+        self.fetch_btn.setToolTip("Fetches the webpage completely on GitHub Actions runner (No local network traffic)")
+        self.fetch_btn.clicked.connect(self._fetch_url_via_github)
+        tb_layout.addWidget(self.fetch_btn)
+
+        # Local quick load button (optional secondary)
+        self.local_go_btn = QPushButton("Local Load ⚡")
+        self.local_go_btn.setToolTip("Loads URL locally without GitHub Actions (for non-blocked sites/localhost)")
+        self.local_go_btn.clicked.connect(self._load_url_locally)
+        tb_layout.addWidget(self.local_go_btn)
 
         tb_layout.addSpacing(10)
 
         # Inspect Mode Toggle Button
         self.inspect_btn = QPushButton("🎯 Inspect Mode")
         self.inspect_btn.setCheckable(True)
-        self.inspect_btn.setToolTip("Toggle Inspect Mode: Hover over and click any element on the page to build an action")
+        self.inspect_btn.setToolTip("Toggle Inspect Mode: Hover over any box and click to add an action")
         self.inspect_btn.clicked.connect(self._toggle_inspect_mode)
         tb_layout.addWidget(self.inspect_btn)
 
-        # Workflow Drawer Toggle Button
+        # Actions Drawer Button
         self.drawer_btn = QPushButton("📋 Actions (0)")
         self.drawer_btn.setCheckable(True)
         self.drawer_btn.setChecked(False)
@@ -144,7 +261,7 @@ class StudioView(QWidget):
         self.drawer_btn.clicked.connect(self._toggle_drawer)
         tb_layout.addWidget(self.drawer_btn)
 
-        # Run on GitHub Actions Primary Button
+        # Run Workflow on GitHub Primary Button
         self.run_btn = QPushButton("🚀 RUN ON GITHUB ACTIONS")
         self.run_btn.setObjectName("primaryBtn")
         self.run_btn.setStyleSheet("font-weight: bold; padding: 8px 18px;")
@@ -158,35 +275,36 @@ class StudioView(QWidget):
         self.settings_btn.clicked.connect(self._open_settings_dialog)
         tb_layout.addWidget(self.settings_btn)
 
-        # Fullscreen Toggle Button
+        # Fullscreen Button
         self.fullscreen_btn = QPushButton("⛶ Fullscreen")
         self.fullscreen_btn.clicked.connect(self._toggle_fullscreen)
         tb_layout.addWidget(self.fullscreen_btn)
 
         root_layout.addWidget(self.toolbar)
 
-        # 2. Inspect Mode Floating Notification Bar
-        self.inspect_banner = QFrame()
-        self.inspect_banner.setStyleSheet("background-color: #1f6feb; color: #ffffff; padding: 6px 16px; border-bottom: 1px solid #388bfd;")
-        b_layout = QHBoxLayout(self.inspect_banner)
-        b_layout.setContentsMargins(12, 4, 12, 4)
-        banner_msg = QLabel("🎯 INSPECT MODE ACTIVE: Hover over any button, input, or box on the webpage and click it to create an automation action.")
-        banner_msg.setStyleSheet("font-weight: bold; color: #ffffff;")
-        b_layout.addWidget(banner_msg)
-        b_layout.addStretch()
+        # 2. Status Banner (Inspect Mode or Remote Fetching)
+        self.status_banner = QFrame()
+        self.status_banner.setStyleSheet("background-color: #1f6feb; color: #ffffff; padding: 6px 16px; border-bottom: 1px solid #388bfd;")
+        sb_layout = QHBoxLayout(self.status_banner)
+        sb_layout.setContentsMargins(12, 4, 12, 4)
 
-        self.exit_inspect_btn = QPushButton("Done Inspecting ✕")
-        self.exit_inspect_btn.setStyleSheet("background-color: #0d1117; color: #ffffff; border: 1px solid #ffffff; font-size: 11px; padding: 4px 10px;")
-        self.exit_inspect_btn.clicked.connect(lambda: self.inspect_btn.setChecked(False) or self._toggle_inspect_mode())
-        b_layout.addWidget(self.exit_inspect_btn)
-        self.inspect_banner.setVisible(False)
-        root_layout.addWidget(self.inspect_banner)
+        self.banner_msg = QLabel("🎯 INSPECT MODE ACTIVE: Hover and click any element to build an action.")
+        self.banner_msg.setStyleSheet("font-weight: bold; color: #ffffff;")
+        sb_layout.addWidget(self.banner_msg)
+        sb_layout.addStretch()
 
-        # 3. Main Center Splitter: Browser View (Full width) + Collapsible Drawer Panel
+        self.banner_action_btn = QPushButton("✕")
+        self.banner_action_btn.setStyleSheet("background-color: transparent; color: #ffffff; font-weight: bold; border: none; font-size: 14px;")
+        self.banner_action_btn.clicked.connect(self._dismiss_banner)
+        sb_layout.addWidget(self.banner_action_btn)
+        self.status_banner.setVisible(False)
+        root_layout.addWidget(self.status_banner)
+
+        # 3. Center Splitter: Chromium Browser + Collapsible Drawer
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setHandleWidth(4)
 
-        # Central Chromium Browser
+        # Browser Container
         self.browser_container = QWidget()
         bc_layout = QVBoxLayout(self.browser_container)
         bc_layout.setContentsMargins(0, 0, 0, 0)
@@ -202,7 +320,7 @@ class StudioView(QWidget):
         bc_layout.addWidget(self.web_view)
         self.splitter.addWidget(self.browser_container)
 
-        # Right-side Drawer / Workflow & Runs Panel
+        # Right-side Collapsible Drawer
         self.drawer_widget = QWidget()
         self.drawer_widget.setMinimumWidth(360)
         self.drawer_widget.setMaximumWidth(520)
@@ -223,11 +341,11 @@ class StudioView(QWidget):
         d_header.addWidget(close_d_btn)
         d_layout.addLayout(d_header)
 
-        # Workflow Name Field
+        # Workflow Name
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel("Name:"))
         self.wf_name_input = QLineEdit(self.state_mgr.current_workflow.name)
-        self.wf_name_input.textChanged.connect(self._on_wf_name_changed)
+        self.wf_name_input.textChanged.connect(lambda t: setattr(self.state_mgr.current_workflow, "name", t.strip() or "Workflow"))
         name_row.addWidget(self.wf_name_input)
         d_layout.addLayout(name_row)
 
@@ -244,7 +362,7 @@ class StudioView(QWidget):
         self.actions_table.doubleClicked.connect(self._edit_selected_action)
         d_layout.addWidget(self.actions_table, stretch=2)
 
-        # Action Reorder / Manage Toolbar
+        # Action Management Buttons
         act_tools = QHBoxLayout()
         self.add_manual_btn = QPushButton("+ Action")
         self.add_manual_btn.clicked.connect(self._add_manual_action)
@@ -257,6 +375,11 @@ class StudioView(QWidget):
         self.del_act_btn = QPushButton("Delete")
         self.del_act_btn.clicked.connect(self._delete_selected_action)
         act_tools.addWidget(self.del_act_btn)
+
+        self.clear_queue_btn = QPushButton("Clear")
+        self.clear_queue_btn.setToolTip("Clear action queue")
+        self.clear_queue_btn.clicked.connect(self._clear_actions)
+        act_tools.addWidget(self.clear_queue_btn)
 
         self.up_btn = QPushButton("↑")
         self.up_btn.setFixedWidth(30)
@@ -296,10 +419,6 @@ class StudioView(QWidget):
         self.run_status_badge.setStyleSheet("font-weight: bold; color: #8b949e;")
         rb_top.addWidget(self.run_status_badge)
         rb_top.addStretch()
-
-        self.refresh_runs_btn = QPushButton("History")
-        self.refresh_runs_btn.clicked.connect(self._show_runs_history)
-        rb_top.addWidget(self.refresh_runs_btn)
         rb_layout.addLayout(rb_top)
 
         self.run_progress = QProgressBar()
@@ -310,65 +429,172 @@ class StudioView(QWidget):
         self.step_logs = QTextEdit()
         self.step_logs.setReadOnly(True)
         self.step_logs.setStyleSheet("font-family: Consolas, monospace; font-size: 11px; background-color: #0d1117; border: none;")
-        self.step_logs.setMaximumHeight(150)
+        self.step_logs.setMaximumHeight(160)
         self.step_logs.setPlaceholderText("Execution step logs will stream here...")
         rb_layout.addWidget(self.step_logs)
 
         d_layout.addWidget(run_box)
 
-        # Add drawer to splitter, hidden by default for maximum screen estate!
         self.splitter.addWidget(self.drawer_widget)
         self.drawer_widget.setVisible(False)
 
         root_layout.addWidget(self.splitter)
 
-        # Initial Page Load
-        initial_url = self.state_mgr.config.last_url or "https://github.com"
-        self.web_view.setUrl(QUrl(initial_url))
-
+        # Initial Welcome / Instruction Page
+        self._load_welcome_screen()
         self.refresh_actions_table()
 
-    def _nav_back(self):
-        self.web_view.back()
+    def _load_welcome_screen(self):
+        welcome_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    background-color: #0d1117;
+                    color: #c9d1d9;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 80vh;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                .card {{
+                    background-color: #161b22;
+                    border: 1px solid #30363d;
+                    border-radius: 12px;
+                    padding: 32px 40px;
+                    max-width: 640px;
+                    text-align: center;
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+                }}
+                h1 {{ color: #58a6ff; margin-top: 0; font-size: 26px; }}
+                p {{ color: #8b949e; line-height: 1.6; font-size: 15px; }}
+                .step {{
+                    background-color: #21262d;
+                    padding: 10px 16px;
+                    border-radius: 8px;
+                    margin: 10px 0;
+                    text-align: left;
+                    font-size: 14px;
+                    color: #f0f6fc;
+                }}
+                .highlight {{ color: #2ea043; font-weight: bold; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>⚡ Browser Automation Studio</h1>
+                <p>Remote browser execution powered 100% by GitHub Actions Ubuntu Runners.</p>
+                <div class="step">1. Enter target URL above and click <span class="highlight">"🌐 Fetch via GitHub 🚀"</span>.</div>
+                <div class="step">2. The page is fetched remotely in the cloud and rendered here on your screen.</div>
+                <div class="step">3. Click <span class="highlight">"🎯 Inspect Mode"</span> to hover & click elements to build actions.</div>
+                <div class="step">4. Click <span class="highlight">"🚀 RUN ON GITHUB ACTIONS"</span> to execute actions; the page updates automatically with the result!</div>
+            </div>
+        </body>
+        </html>
+        """
+        self.web_view.setHtml(welcome_html)
 
-    def _nav_forward(self):
-        self.web_view.forward()
+    def _fetch_url_via_github(self):
+        """Fetches the target webpage using GitHub Actions runner (Remote Execution)."""
+        raw = self.url_input.text().strip()
+        if not raw:
+            QMessageBox.warning(self, "Invalid URL", "Please enter a valid website URL.")
+            return
 
-    def _nav_reload(self):
-        self.web_view.reload()
+        if not raw.startswith("http://") and not raw.startswith("https://"):
+            raw = "https://" + raw
+        self.url_input.setText(raw)
+        self.current_page_url = raw
+        self.state_mgr.config.last_url = raw
+        self.state_mgr.config.save()
+        self.state_mgr.current_workflow.target_url = raw
 
-    def _load_url_from_input(self):
+        client = self.state_mgr.get_github_client()
+        if not client:
+            self._open_settings_dialog()
+            return
+
+        # Show banner
+        self.status_banner.setStyleSheet("background-color: #d29922; color: #0d1117; padding: 6px 16px;")
+        self.banner_msg.setText(f"🌐 FETCHING VIA GITHUB ACTIONS RUNNER: Opening {raw} on Ubuntu runner (zero local network usage)...")
+        self.status_banner.setVisible(True)
+        self.fetch_btn.setEnabled(False)
+
+        # Run background worker
+        self.fetch_worker = RemotePageFetchWorker(self.state_mgr, raw)
+        self.fetch_worker.status_update.connect(lambda msg: self.banner_msg.setText(f"🌐 GITHUB ACTIONS: {msg}"))
+        self.fetch_worker.finished.connect(self._on_remote_fetch_finished)
+        self.fetch_worker.start()
+
+    def _on_remote_fetch_finished(self, bundle: Optional[InspectBundle], error_msg: str):
+        self.fetch_btn.setEnabled(True)
+        if error_msg or not bundle:
+            self.status_banner.setStyleSheet("background-color: #da3633; color: #ffffff; padding: 6px 16px;")
+            self.banner_msg.setText(f"❌ FETCH FAILED: {error_msg}")
+            QMessageBox.critical(self, "Remote Fetch Error", f"Failed to fetch page via GitHub Actions:\n{error_msg}")
+            return
+
+        # Render the fetched HTML snapshot inside Chromium!
+        self.status_banner.setStyleSheet("background-color: #238636; color: #ffffff; padding: 6px 16px;")
+        self.banner_msg.setText(f"✓ Page loaded from GitHub runner: '{bundle.title}' ({len(bundle.dom_elements)} elements detected).")
+
+        html_content = bundle.html_snapshot or "<h1>Page snapshot loaded successfully</h1>"
+        self.web_view.setHtml(html_content, QUrl(bundle.url))
+        self.url_input.setText(bundle.url)
+        self.current_page_url = bundle.url
+        self.state_mgr.current_workflow.target_url = bundle.url
+        self.state_mgr.current_inspect_bundle = bundle
+
+    def _load_url_locally(self):
+        """Loads URL directly in embedded Chromium without GitHub Actions."""
         raw = self.url_input.text().strip()
         if not raw:
             return
         if not raw.startswith("http://") and not raw.startswith("https://") and not raw.startswith("file://"):
             raw = "https://" + raw
         self.url_input.setText(raw)
+        self.current_page_url = raw
         self.state_mgr.config.last_url = raw
         self.state_mgr.config.save()
+        self.state_mgr.current_workflow.target_url = raw
         self.web_view.setUrl(QUrl(raw))
 
     def _on_url_changed(self, qurl: QUrl):
         url_str = qurl.toString()
-        self.url_input.setText(url_str)
-        self.state_mgr.current_workflow.target_url = url_str
+        if not url_str.startswith("about:"):
+            self.url_input.setText(url_str)
+            self.current_page_url = url_str
+            self.state_mgr.current_workflow.target_url = url_str
 
     def _on_page_load_finished(self, success: bool):
-        # Inject our DOM inspector script whenever the page loads
+        # Inject inspector script
         self.web_view.page().runJavaScript(INSPECTOR_JS_CODE)
         if self.inspect_mode_active:
             self.web_view.page().runJavaScript("window.__STUDIO_SET_INSPECT_MODE(true);")
 
     def _toggle_inspect_mode(self):
         self.inspect_mode_active = self.inspect_btn.isChecked()
-        self.inspect_banner.setVisible(self.inspect_mode_active)
-
         if self.inspect_mode_active:
+            self.status_banner.setStyleSheet("background-color: #1f6feb; color: #ffffff; padding: 6px 16px;")
+            self.banner_msg.setText("🎯 INSPECT MODE ACTIVE: Hover over any element and click it to create an action.")
+            self.status_banner.setVisible(True)
             self.inspect_btn.setStyleSheet("background-color: #1f6feb; color: #ffffff; border-color: #58a6ff; font-weight: bold;")
             self.web_view.page().runJavaScript("window.__STUDIO_SET_INSPECT_MODE(true);")
         else:
+            self.status_banner.setVisible(False)
             self.inspect_btn.setStyleSheet("")
             self.web_view.page().runJavaScript("window.__STUDIO_SET_INSPECT_MODE(false);")
+
+    def _dismiss_banner(self):
+        self.status_banner.setVisible(False)
+        if self.inspect_mode_active:
+            self.inspect_btn.setChecked(False)
+            self._toggle_inspect_mode()
 
     def _toggle_drawer(self):
         is_open = self.drawer_btn.isChecked()
@@ -391,40 +617,35 @@ class StudioView(QWidget):
 
     def _on_element_inspected(self, element_data: dict):
         """Called when user clicks an element in Inspect Mode."""
-        # Pop up the spacious quick action modal
         modal = QuickActionModal(element_data, parent=self)
         if modal.exec() == QDialog.Accepted:
             action = modal.get_action()
             self.state_mgr.current_workflow.actions.append(action)
             self.refresh_actions_table()
 
-            # Ensure drawer is open so user sees their new action
+            # Open drawer so user sees their new action
             if not self.drawer_widget.isVisible():
                 self.drawer_btn.setChecked(True)
                 self._toggle_drawer()
 
     def refresh_actions_table(self):
-        """Updates the actions table with active workflow items."""
+        """Updates the actions table."""
         actions = self.state_mgr.current_workflow.actions
         self.drawer_btn.setText(f"📋 Actions ({len(actions)})")
         self.actions_table.setRowCount(len(actions))
 
         for row, act in enumerate(actions):
-            # Index
             idx_item = QTableWidgetItem(str(row + 1))
             idx_item.setTextAlignment(Qt.AlignCenter)
             self.actions_table.setItem(row, 0, idx_item)
 
-            # Type
             type_item = QTableWidgetItem(act.type.value.upper())
             type_item.setTextAlignment(Qt.AlignCenter)
             self.actions_table.setItem(row, 1, type_item)
 
-            # Selector
             sel = getattr(act, "selector", "-") or "-"
             self.actions_table.setItem(row, 2, QTableWidgetItem(sel))
 
-            # Details
             details = ""
             if isinstance(act, TypeAction):
                 details = f"\"{act.text}\""
@@ -434,8 +655,9 @@ class StudioView(QWidget):
                 details = f"{act.milliseconds}ms"
             self.actions_table.setItem(row, 3, QTableWidgetItem(details))
 
-    def _on_wf_name_changed(self, text: str):
-        self.state_mgr.current_workflow.name = text.strip() or "Untitled Workflow"
+    def _clear_actions(self):
+        self.state_mgr.current_workflow.actions.clear()
+        self.refresh_actions_table()
 
     def _add_manual_action(self):
         dlg = ActionDialog(parent=self)
@@ -500,7 +722,7 @@ class StudioView(QWidget):
                 self.wf_name_input.setText(wf.name)
                 self.refresh_actions_table()
                 if wf.target_url:
-                    self.web_view.setUrl(QUrl(wf.target_url))
+                    self.url_input.setText(wf.target_url)
                 QMessageBox.information(self, "Loaded", f"Loaded workflow: {wf.name}")
             except Exception as e:
                 QMessageBox.critical(self, "Load Failed", str(e))
@@ -527,11 +749,12 @@ class StudioView(QWidget):
                 commit_message=f"feat: update workflow {self.state_mgr.current_workflow.name}",
                 sha=existing_sha,
             )
-            QMessageBox.information(self, "Committed to GitHub", f"Workflow saved directly to private repository:\n{remote_path}")
+            QMessageBox.information(self, "Committed", f"Workflow saved to private repository:\n{remote_path}")
         except Exception as e:
-            QMessageBox.critical(self, "Commit Failed", f"Failed to commit workflow to GitHub: {e}")
+            QMessageBox.critical(self, "Commit Failed", str(e))
 
     def _execute_workflow_on_github(self):
+        """Dispatches active workflow to GitHub Actions runner, streams logs, and updates the resulting page!"""
         client = self.state_mgr.get_github_client()
         if not client:
             self._open_settings_dialog()
@@ -539,17 +762,12 @@ class StudioView(QWidget):
 
         wf = self.state_mgr.current_workflow
         if not wf.actions:
-            QMessageBox.warning(self, "Empty Workflow", "Please add at least one action before executing.")
+            QMessageBox.warning(self, "Empty Workflow", "Please add at least one action to execute.")
             return
 
-        confirm = QMessageBox.question(
-            self,
-            "Execute on GitHub Actions",
-            f"Dispatch '{wf.name}' ({len(wf.actions)} actions) to execute remotely on Ubuntu runner in '{client.owner}/{client.repo}'?",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-        if confirm != QMessageBox.Yes:
-            return
+        # Ensure current target URL is attached
+        if self.current_page_url and not self.current_page_url.startswith("about:"):
+            wf.target_url = self.current_page_url
 
         # Open drawer so user sees live logs
         if not self.drawer_widget.isVisible():
@@ -559,85 +777,48 @@ class StudioView(QWidget):
         self.run_status_badge.setText("● DISPATCHING TO GITHUB...")
         self.run_status_badge.setStyleSheet("font-weight: bold; color: #d29922;")
         self.run_progress.setVisible(True)
+        self.run_btn.setEnabled(False)
         self.step_logs.clear()
-        self.step_logs.append(f"Dispatched '{wf.name}' to GitHub Actions runner...")
+        self.step_logs.append(f"Dispatching '{wf.name}' ({len(wf.actions)} actions) to GitHub runner...")
 
-        try:
-            wf_json = json.dumps(wf.model_dump())
-            client.dispatch_workflow("browser-automation.yml", inputs={"workflow_json": wf_json})
-            self.step_logs.append("Workflow dispatch event accepted by GitHub REST API.")
+        # Run background execution worker
+        self.exec_worker = RemoteWorkflowExecutionWorker(self.state_mgr, wf)
+        self.exec_worker.status_update.connect(lambda msg: self.run_status_badge.setText(f"● {msg.upper()}"))
+        self.exec_worker.step_log_received.connect(lambda log: self.step_logs.setPlainText(log))
+        self.exec_worker.finished.connect(self._on_remote_execution_finished)
+        self.exec_worker.start()
 
-            # Poll for run status after 3 seconds
-            QTimer.singleShot(3500, self._poll_dispatched_run)
-        except Exception as e:
-            self.run_status_badge.setText("● DISPATCH FAILED")
+    def _on_remote_execution_finished(self, completed_run: Optional[WorkflowRunInfo], bundle: Optional[InspectBundle], error_msg: str):
+        self.run_progress.setVisible(False)
+        self.run_btn.setEnabled(True)
+
+        if error_msg:
+            self.run_status_badge.setText("● EXECUTION FAILED")
             self.run_status_badge.setStyleSheet("font-weight: bold; color: #f85149;")
-            self.run_progress.setVisible(False)
-            self.step_logs.append(f"\nError dispatching workflow: {e}")
-
-    def _poll_dispatched_run(self):
-        client = self.state_mgr.get_github_client()
-        if not client:
+            self.step_logs.append(f"\nExecution error: {error_msg}")
+            QMessageBox.critical(self, "Execution Error", f"Workflow execution failed:\n{error_msg}")
             return
 
-        try:
-            runs = client.list_workflow_runs("browser-automation.yml", per_page=3)
-            if runs:
-                latest = runs[0]
-                self.run_status_badge.setText(f"● RUNNING #{latest.run_number}")
-                self.run_status_badge.setStyleSheet("font-weight: bold; color: #2ea043;")
-                self.step_logs.append(f"Tracking Job #{latest.run_number} on GitHub runner...")
+        if completed_run:
+            is_success = (completed_run.conclusion == RunConclusion.SUCCESS)
+            color = "#2ea043" if is_success else "#f85149"
+            status_txt = completed_run.conclusion.value.upper() if completed_run.conclusion else "COMPLETED"
+            self.run_status_badge.setText(f"● {status_txt}")
+            self.run_status_badge.setStyleSheet(f"font-weight: bold; color: {color};")
+            self.step_logs.append(f"\nCompleted on GitHub Actions with status: {status_txt}")
 
-                # Stream status periodically
-                self.active_run_id = latest.id
-                self.poll_timer = QTimer(self)
-                self.poll_timer.setInterval(3000)
-                self.poll_timer.timeout.connect(self._check_run_progress)
-                self.poll_timer.start()
-        except Exception as e:
-            self.step_logs.append(f"Polling error: {e}")
+            # 1. Update the live page in the browser with the resulting snapshot from runner!
+            if bundle and bundle.html_snapshot:
+                self.web_view.setHtml(bundle.html_snapshot, QUrl(bundle.url))
+                self.url_input.setText(bundle.url)
+                self.current_page_url = bundle.url
+                self.state_mgr.current_workflow.target_url = bundle.url
+                self.state_mgr.current_inspect_bundle = bundle
+                self.status_banner.setStyleSheet("background-color: #238636; color: #ffffff; padding: 6px 16px;")
+                self.banner_msg.setText(f"✓ Action executed on GitHub! Updated page rendered: {bundle.url}")
+                self.status_banner.setVisible(True)
 
-    def _check_run_progress(self):
-        client = self.state_mgr.get_github_client()
-        if not client or not hasattr(self, "active_run_id"):
-            return
-
-        try:
-            run_info = client.get_run(self.active_run_id)
-            jobs = client.get_run_jobs(self.active_run_id)
-
-            log_lines = [f"=== GitHub Actions Run #{run_info.run_number} ==="]
-            for j in jobs:
-                log_lines.append(f"Job: {j.name} ({j.status})")
-                for s in j.steps:
-                    c = f"[{s.conclusion.upper()}]" if s.conclusion else f"({s.status})"
-                    log_lines.append(f"  • {s.name}: {c}")
-
-            self.step_logs.setPlainText("\n".join(log_lines))
-
-            if run_info.status == RunStatus.COMPLETED:
-                self.poll_timer.stop()
-                self.run_progress.setVisible(False)
-                is_success = run_info.conclusion == RunConclusion.SUCCESS
-                color = "#2ea043" if is_success else "#f85149"
-                status_txt = run_info.conclusion.value.upper() if run_info.conclusion else "COMPLETED"
-                self.run_status_badge.setText(f"● {status_txt}")
-                self.run_status_badge.setStyleSheet(f"font-weight: bold; color: {color};")
-                self.step_logs.append(f"\nCompleted with conclusion: {status_txt}")
-
-        except Exception as e:
-            pass
-
-    def _show_runs_history(self):
-        client = self.state_mgr.get_github_client()
-        if not client:
-            return
-        try:
-            runs = client.list_workflow_runs(per_page=10)
-            lines = ["Recent Runs:"]
-            for r in runs:
-                conc = r.conclusion.value.upper() if r.conclusion else r.status.value.upper()
-                lines.append(f"#{r.run_number}: {r.name} -> {conc} ({r.created_at})")
-            self.step_logs.setPlainText("\n".join(lines))
-        except Exception as e:
-            self.step_logs.setText(f"Error fetching history: {e}")
+            # 2. CLEAR the executed actions queue so user can begin next actions!
+            self.state_mgr.current_workflow.actions.clear()
+            self.refresh_actions_table()
+            self.step_logs.append("\n✓ Executed action queue cleared.")
