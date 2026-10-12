@@ -1,0 +1,83 @@
+name: Inspect Web Page
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Target URL to inspect"
+        required: true
+        type: string
+      viewport_width:
+        description: "Viewport width (px)"
+        required: false
+        default: "1280"
+        type: string
+      viewport_height:
+        description: "Viewport height (px)"
+        required: false
+        default: "800"
+        type: string
+
+concurrency:
+  group: browser-session
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Run Page Inspector
+        env:
+          BROWSER_STATE_KEY: ${{ secrets.BROWSER_STATE_KEY }}
+        run: |
+          python -m automation.runner \
+            --mode inspect \
+            --url "${{ inputs.url }}" \
+            --viewport-width ${{ inputs.viewport_width }} \
+            --viewport-height ${{ inputs.viewport_height }} \
+            --state-file "state/browser_state.enc" \
+            --artifacts-dir "artifacts"
+
+      - name: Commit updated session state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f "state/browser_state.enc" ] && git status --porcelain state/browser_state.enc | grep -q "state/browser_state.enc"; then
+            git add state/browser_state.enc
+            git commit -m "chore: update browser session state [skip ci]"
+            git push
+          else
+            echo "No browser session state changes to commit."
+          fi
+
+      - name: Upload Inspection Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspection-bundle
+          path: artifacts/
+          retention-days: 7

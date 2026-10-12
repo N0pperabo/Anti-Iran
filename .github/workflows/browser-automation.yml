@@ -1,0 +1,87 @@
+name: Browser Automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_file:
+        description: "Path to workflow JSON file in repo (e.g., workflows/examples/github_search.json)"
+        required: false
+        default: "workflows/examples/github_search.json"
+        type: string
+      workflow_json:
+        description: "Inline workflow JSON string (overrides workflow_file if provided)"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: browser-session
+  cancel-in-progress: false
+
+jobs:
+  execute-automation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Execute Workflow Actions
+        env:
+          BROWSER_STATE_KEY: ${{ secrets.BROWSER_STATE_KEY }}
+          INLINE_JSON: ${{ inputs.workflow_json }}
+          FILE_PATH: ${{ inputs.workflow_file }}
+        run: |
+          if [ -n "$INLINE_JSON" ]; then
+            echo "$INLINE_JSON" > /tmp/workflow_run.json
+            WORKFLOW_INPUT="/tmp/workflow_run.json"
+          else
+            WORKFLOW_INPUT="$FILE_PATH"
+          fi
+          
+          python -m automation.runner \
+            --mode execute \
+            --workflow "$WORKFLOW_INPUT" \
+            --state-file "state/browser_state.enc" \
+            --artifacts-dir "artifacts"
+
+      - name: Commit updated session state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f "state/browser_state.enc" ] && git status --porcelain state/browser_state.enc | grep -q "state/browser_state.enc"; then
+            git add state/browser_state.enc
+            git commit -m "chore: persist updated browser session state [skip ci]"
+            git push
+          else
+            echo "No browser session state changes to commit."
+          fi
+
+      - name: Upload Run Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-bundle
+          path: artifacts/
+          retention-days: 7

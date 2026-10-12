@@ -1,0 +1,31 @@
+# Python & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build & Packaging
+build/
+dist/
+*.egg-info/
+*.spec.bak
+
+# Local artifacts & temporary files
+artifacts/
+*.log
+.env
+
+# OS Files
+.DS_Store
+Thumbs.db

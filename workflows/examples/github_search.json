@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "id": "sample-github-search",
+  "name": "GitHub Search Demo",
+  "description": "Demonstration workflow that visits GitHub and searches for actions",
+  "target_url": "https://github.com",
+  "viewport": {
+    "width": 1280,
+    "height": 800,
+    "device_scale_factor": 1.0
+  },
+  "user_agent": null,
+  "restore_state": true,
+  "save_state": true,
+  "actions": [
+    {
+      "id": "act-001",
+      "type": "click",
+      "description": "Focus search input",
+      "enabled": true,
+      "timeout_ms": 10000,
+      "retry_count": 1,
+      "fallback_selectors": [
+        "input[type='search']",
+        "[aria-label='Search']",
+        "#search"
+      ],
+      "selector": "input[name='q']",
+      "button": "left",
+      "modifiers": []
+    },
+    {
+      "id": "act-002",
+      "type": "type",
+      "description": "Type search term",
+      "enabled": true,
+      "timeout_ms": 10000,
+      "retry_count": 1,
+      "fallback_selectors": [],
+      "selector": "input[name='q']",
+      "text": "GitHub Actions",
+      "delay_ms": 0,
+      "clear_first": false
+    },
+    {
+      "id": "act-003",
+      "type": "key_press",
+      "description": "Submit search by pressing Enter",
+      "enabled": true,
+      "timeout_ms": 10000,
+      "retry_count": 1,
+      "fallback_selectors": [],
+      "key": "Enter",
+      "selector": null
+    },
+    {
+      "id": "act-004",
+      "type": "wait",
+      "description": "Wait for search results to load",
+      "enabled": true,
+      "timeout_ms": 10000,
+      "retry_count": 1,
+      "fallback_selectors": [],
+      "milliseconds": 2000,
+      "selector": null,
+      "state": "visible"
+    }
+  ]
+}

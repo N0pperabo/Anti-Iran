@@ -1,0 +1,1649 @@
+{
+  "$defs": {
+    "ActionType": {
+      "description": "Supported automation action types.",
+      "enum": [
+        "click",
+        "double_click",
+        "right_click",
+        "type",
+        "clear",
+        "key_press",
+        "key_down",
+        "key_up",
+        "mouse_move",
+        "scroll",
+        "wait",
+        "select_option",
+        "check",
+        "uncheck",
+        "screenshot",
+        "extract_text",
+        "extract_attribute",
+        "navigate",
+        "go_back",
+        "go_forward",
+        "reload"
+      ],
+      "title": "ActionType",
+      "type": "string"
+    },
+    "CheckAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "check"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "selector"
+      ],
+      "title": "CheckAction",
+      "type": "object"
+    },
+    "ClearAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "clear"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "selector"
+      ],
+      "title": "ClearAction",
+      "type": "object"
+    },
+    "ClickAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "click"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        },
+        "button": {
+          "default": "left",
+          "description": "Mouse button: left, right, middle",
+          "title": "Button",
+          "type": "string"
+        },
+        "modifiers": {
+          "description": "Modifier keys: Alt, Control, Meta, Shift",
+          "items": {
+            "type": "string"
+          },
+          "title": "Modifiers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "selector"
+      ],
+      "title": "ClickAction",
+      "type": "object"
+    },
+    "DoubleClickAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "double_click"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "selector"
+      ],
+      "title": "DoubleClickAction",
+      "type": "object"
+    },
+    "ExtractAttributeAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "extract_attribute"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        },
+        "attribute_name": {
+          "description": "Attribute name to extract (e.g., 'href', 'value')",
+          "title": "Attribute Name",
+          "type": "string"
+        },
+        "variable_name": {
+          "default": "extracted_attr",
+          "description": "Variable key to store value",
+          "title": "Variable Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "selector",
+        "attribute_name"
+      ],
+      "title": "ExtractAttributeAction",
+      "type": "object"
+    },
+    "ExtractTextAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "extract_text"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        },
+        "variable_name": {
+          "default": "extracted_text",
+          "description": "Variable key to store extracted text",
+          "title": "Variable Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "selector"
+      ],
+      "title": "ExtractTextAction",
+      "type": "object"
+    },
+    "GoBackAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "go_back"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "GoBackAction",
+      "type": "object"
+    },
+    "GoForwardAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "go_forward"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "GoForwardAction",
+      "type": "object"
+    },
+    "KeyDownAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "key_down"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "key": {
+          "description": "Key identifier",
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "key"
+      ],
+      "title": "KeyDownAction",
+      "type": "object"
+    },
+    "KeyPressAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "key_press"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "key": {
+          "description": "Key identifier (e.g. 'Enter', 'Tab', 'Control+A')",
+          "title": "Key",
+          "type": "string"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional target selector to focus before key press",
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "id",
+        "key"
+      ],
+      "title": "KeyPressAction",
+      "type": "object"
+    },
+    "KeyUpAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "key_up"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "key": {
+          "description": "Key identifier",
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "key"
+      ],
+      "title": "KeyUpAction",
+      "type": "object"
+    },
+    "MouseMoveAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "mouse_move"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "x": {
+          "description": "Target X coordinate",
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "description": "Target Y coordinate",
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y"
+      ],
+      "title": "MouseMoveAction",
+      "type": "object"
+    },
+    "NavigateAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "navigate"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "url": {
+          "description": "URL to navigate to",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "url"
+      ],
+      "title": "NavigateAction",
+      "type": "object"
+    },
+    "ReloadAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "reload"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ReloadAction",
+      "type": "object"
+    },
+    "RightClickAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "right_click"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "selector"
+      ],
+      "title": "RightClickAction",
+      "type": "object"
+    },
+    "ScreenshotAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "screenshot"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Output filename (saved into run artifacts)",
+          "title": "Filename"
+        },
+        "full_page": {
+          "default": false,
+          "description": "Capture full scrollable page",
+          "title": "Full Page",
+          "type": "boolean"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional element to capture specifically",
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ScreenshotAction",
+      "type": "object"
+    },
+    "ScrollAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "scroll"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "delta_x": {
+          "default": 0,
+          "description": "Horizontal scroll amount",
+          "title": "Delta X",
+          "type": "integer"
+        },
+        "delta_y": {
+          "default": 500,
+          "description": "Vertical scroll amount",
+          "title": "Delta Y",
+          "type": "integer"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional element to scroll inside",
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ScrollAction",
+      "type": "object"
+    },
+    "SelectOptionAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "select_option"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        },
+        "values": {
+          "description": "List of option values or labels to select",
+          "items": {
+            "type": "string"
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "selector",
+        "values"
+      ],
+      "title": "SelectOptionAction",
+      "type": "object"
+    },
+    "TypeAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "type"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        },
+        "text": {
+          "description": "Text to type into the element",
+          "title": "Text",
+          "type": "string"
+        },
+        "delay_ms": {
+          "default": 0,
+          "description": "Delay between keystrokes in milliseconds",
+          "title": "Delay Ms",
+          "type": "integer"
+        },
+        "clear_first": {
+          "default": false,
+          "description": "Clear existing text before typing",
+          "title": "Clear First",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "selector",
+        "text"
+      ],
+      "title": "TypeAction",
+      "type": "object"
+    },
+    "UncheckAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "uncheck"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "selector": {
+          "description": "Primary CSS or XPath selector",
+          "title": "Selector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "selector"
+      ],
+      "title": "UncheckAction",
+      "type": "object"
+    },
+    "ViewportConfig": {
+      "description": "Browser viewport configuration.",
+      "properties": {
+        "width": {
+          "default": 1280,
+          "description": "Viewport width in pixels",
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "default": 800,
+          "description": "Viewport height in pixels",
+          "title": "Height",
+          "type": "integer"
+        },
+        "device_scale_factor": {
+          "default": 1.0,
+          "description": "DPI scale factor",
+          "title": "Device Scale Factor",
+          "type": "number"
+        }
+      },
+      "title": "ViewportConfig",
+      "type": "object"
+    },
+    "WaitAction": {
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the action",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ActionType",
+          "default": "wait"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this action should be executed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "description": "Max execution timeout in milliseconds",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "default": 1,
+          "description": "Number of retries if selector fails",
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "fallback_selectors": {
+          "description": "Alternative selectors to try if primary fails",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Selectors",
+          "type": "array"
+        },
+        "milliseconds": {
+          "default": 1000,
+          "description": "Fixed delay in milliseconds",
+          "title": "Milliseconds",
+          "type": "integer"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional selector to wait for",
+          "title": "Selector"
+        },
+        "state": {
+          "default": "visible",
+          "description": "Target element state: 'attached', 'detached', 'visible', 'hidden'",
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "WaitAction",
+      "type": "object"
+    }
+  },
+  "description": "Declarative browser automation workflow definition.",
+  "properties": {
+    "version": {
+      "default": 1,
+      "description": "Schema version number",
+      "title": "Version",
+      "type": "integer"
+    },
+    "id": {
+      "description": "Unique workflow identifier",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "description": "Human-readable workflow name",
+      "title": "Name",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Detailed explanation of the workflow",
+      "title": "Description"
+    },
+    "target_url": {
+      "description": "Initial website URL to navigate to",
+      "title": "Target Url",
+      "type": "string"
+    },
+    "viewport": {
+      "$ref": "#/$defs/ViewportConfig",
+      "description": "Browser window dimensions"
+    },
+    "user_agent": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Custom User-Agent string",
+      "title": "User Agent"
+    },
+    "restore_state": {
+      "default": true,
+      "description": "Whether to load stored session cookies/storage",
+      "title": "Restore State",
+      "type": "boolean"
+    },
+    "save_state": {
+      "default": true,
+      "description": "Whether to encrypt & persist updated session cookies/storage",
+      "title": "Save State",
+      "type": "boolean"
+    },
+    "actions": {
+      "description": "Ordered list of actions to execute",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ClickAction"
+          },
+          {
+            "$ref": "#/$defs/DoubleClickAction"
+          },
+          {
+            "$ref": "#/$defs/RightClickAction"
+          },
+          {
+            "$ref": "#/$defs/TypeAction"
+          },
+          {
+            "$ref": "#/$defs/ClearAction"
+          },
+          {
+            "$ref": "#/$defs/KeyPressAction"
+          },
+          {
+            "$ref": "#/$defs/KeyDownAction"
+          },
+          {
+            "$ref": "#/$defs/KeyUpAction"
+          },
+          {
+            "$ref": "#/$defs/MouseMoveAction"
+          },
+          {
+            "$ref": "#/$defs/ScrollAction"
+          },
+          {
+            "$ref": "#/$defs/WaitAction"
+          },
+          {
+            "$ref": "#/$defs/SelectOptionAction"
+          },
+          {
+            "$ref": "#/$defs/CheckAction"
+          },
+          {
+            "$ref": "#/$defs/UncheckAction"
+          },
+          {
+            "$ref": "#/$defs/ScreenshotAction"
+          },
+          {
+            "$ref": "#/$defs/ExtractTextAction"
+          },
+          {
+            "$ref": "#/$defs/ExtractAttributeAction"
+          },
+          {
+            "$ref": "#/$defs/NavigateAction"
+          },
+          {
+            "$ref": "#/$defs/GoBackAction"
+          },
+          {
+            "$ref": "#/$defs/GoForwardAction"
+          },
+          {
+            "$ref": "#/$defs/ReloadAction"
+          }
+        ]
+      },
+      "title": "Actions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "target_url"
+  ],
+  "title": "WorkflowDefinition",
+  "type": "object"
+}
