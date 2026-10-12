@@ -69,7 +69,8 @@ jobs:
           if [ -f "state/browser_state.enc" ] && git status --porcelain state/browser_state.enc | grep -q "state/browser_state.enc"; then
             git add state/browser_state.enc
             git commit -m "chore: update browser session state [skip ci]"
-            git push
+            git pull --rebase origin main || true
+            git push || true
           else
             echo "No browser session state changes to commit."
           fi

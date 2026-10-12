@@ -114,6 +114,18 @@ def generate_candidate_selectors(
             )
         )
 
+    # 4b. Text-based locator for buttons and links (Playwright has-text)
+    if text_content and tag in ("button", "a", "span", "p", "h1", "h2", "h3", "h4", "li", "div"):
+        clean_text = text_content.strip()
+        if 2 <= len(clean_text) <= 40 and "\n" not in clean_text:
+            safe_text = clean_text.replace('"', '\\"')
+            candidates.append(
+                SelectorCandidate(
+                    selector=f"{tag}:has-text(\"{safe_text}\")",
+                    priority=SelectorPriority.ROLE,
+                )
+            )
+
     # 5. Stable CSS class
     class_attr = attributes.get("class", "")
     if class_attr:
